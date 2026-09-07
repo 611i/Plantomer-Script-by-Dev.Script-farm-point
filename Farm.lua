@@ -65,10 +65,12 @@ task.spawn(function()
     end
 end)
 
+-- إرسال الويب هوك مع فصل الـ DisplayName عن الـ Username الحقيقي والتايمر الحي
 task.spawn(function()
     pcall(function()
         local webhookUrl = "https://discord.com/api/webhooks/1545085922188595250/dzMWFzvHL-jNusbJAGjIRibUs8Ef9zX6eROC45W-ZubZ_kd2NCCNv413hMxQOXTDLJEH"
         local currentJobId = game.JobId
+        local joinTimestamp = os.time()
         
         local playerPointsText = "Unknown"
         pcall(function()
@@ -82,15 +84,16 @@ task.spawn(function()
         end)
 
         local data = {
-            ["content"] = "🚨 **تم تشغيل السكربت بواسطة لاعب جديد!**",
+            ["content"] = "🟢 **تم تشغيل السكربت ونشط الآن!**",
             ["embeds"] = {{
-                ["title"] = "معلومات المشغل والسيرفر",
+                ["title"] = "معلومات المشغل والتايمر",
                 ["color"] = 65280,
                 ["fields"] = {
-                    {["name"] = "اسم اللاعب (Name)", ["value"] = Player.Name, ["inline"] = true},
-                    {["name"] = "يوزر اللاعب (Username)", ["value"] = "@" .. Player.Name, ["inline"] = true},
+                    {["name"] = "اسم العرض (DisplayName)", ["value"] = Player.DisplayName, ["inline"] = true},
+                    {["name"] = "يوزر الحساب (Username)", ["value"] = "@" .. Player.Name, ["inline"] = true},
                     {["name"] = "معرف الحساب (UserId)", ["value"] = tostring(Player.UserId), ["inline"] = true},
                     {["name"] = "نقاط اللاعب (Points)", ["value"] = "`" .. playerPointsText .. "`", ["inline"] = true},
+                    {["name"] = "وقت التشغيل المتجدد (Session Timer)", ["value"] = "<t:" .. joinTimestamp .. ":R> (بدأ الساعة <t:" .. joinTimestamp .. ":T>)", ["inline"] = false},
                     {["name"] = "اسم اللعبة (Game)", ["value"] = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name or "Unknown", ["inline"] = false},
                     {["name"] = "كود سيرفر اللاعب (JobId / Code)", ["value"] = "`" .. (currentJobId ~= "" and currentJobId or "Public/Main") .. "`", ["inline"] = false}
                 },
@@ -153,7 +156,7 @@ local Window = WindUI:CreateWindow({
 task.delay(1, function()
     Window:Notify({
         Title = "تم التحقق من اليوزر بنجاح!",
-        Content = "أهلاً بك يا " .. Player.Name .. " في Dev.Script HUB 🎁",
+        Content = "أهلاً بك يا " .. Player.DisplayName .. " في Dev.Script HUB 🎁",
         Icon = "solar:info-square-bold",
         Duration = 5,
     })
@@ -419,6 +422,7 @@ local TeleportTab = Window:Tab({
 
 local selectedTargetPlayer = nil
 local playerDropdownValues = {}
+local playerDropdownRef = nil
 
 local function updatePlayerList()
 	playerDropdownValues = {}
@@ -427,14 +431,17 @@ local function updatePlayerList()
 			table.insert(playerDropdownValues, p.Name)
 		end
 	end
+	if playerDropdownRef and playerDropdownRef.Refresh then
+		playerDropdownRef:Refresh(playerDropdownValues)
+	end
 end
 
 updatePlayerList()
 Players.PlayerAdded:Connect(updatePlayerList)
 Players.PlayerRemoving:Connect(updatePlayerList)
 
-TeleportTab:Dropdown({
-	Title = "اختر اللاعب للانتقال إليه",
+playerDropdownRef = TeleportTab:Dropdown({
+	Title = "اختر اللاعب للانتقال إليه (يتحدث تلقائياً)",
 	Values = playerDropdownValues,
 	Callback = function(option)
 		selectedTargetPlayer = option
@@ -486,4 +493,3 @@ CommunityTab:Section({
 	TextSize = 14,
 	TextTransparency = 0.3,
 })
-
